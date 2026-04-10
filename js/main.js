@@ -1,16 +1,79 @@
 // js/main.js
 import './firebase.js';                // تهيئة Firebase والمتغيرات العامة
 import { initAuth, listenToUserData } from './auth.js';
-import { updateUI, navTo, renderMap, renderShop, renderLeaderboard, renderDailyChallenge, renderStats, switchStatsTab } from './ui.js';
-import { showToast, playSound, openModal, closeModal, showConfirmDialog, showInputDialog, confirmInput, cancelInput, confirmExit, _confirmExit, _cancelExit } from './helpers.js';
-import { saveData, updateDailyTask, updateWeeklyTask, addSeasonXP, checkLevel, updateLoginStreak } from './data.js';
-import { startQuiz, showQuestion, selectAnswer, nextQuestion, useHelper, askAIAnalysis } from './quiz.js';
-import { createRoom, joinRoomByCode, joinRoomById, confirmCreateRoom, toggleReady, startRoomGame, leaveRoom, sendLobbyMessage, kickPlayer, loadRooms } from './rooms.js';
-import { startDailyChallenge, renderWeeklyChallenge, renderSeasonTab, switchChallengeTab, claimWeeklyTask, startWeeklyChallenge } from './challenges.js';
-import { showFriendsModal, copyFriendCode, addFriendByCode, removeFriend } from './friends.js';
+import {
+  updateUI,
+  navTo,
+  renderMap,
+  renderShop,
+  renderLeaderboard,
+  renderDailyChallenge,
+  renderStats,
+  switchStatsTab,
+  renderColorPicker,
+  showShopTab
+} from './ui.js';
+import {
+  showToast,
+  playSound,
+  openModal,
+  closeModal,
+  showConfirmDialog,
+  showInputDialog,
+  confirmInput,
+  cancelInput,
+  confirmExit,
+  _confirmExit,
+  _cancelExit
+} from './helpers.js';
+import {
+  saveData,
+  updateDailyTask,
+  updateWeeklyTask,
+  addSeasonXP,
+  checkLevel,
+  updateLoginStreak,
+  AVATAR_FRAMES,
+  ACCENT_COLORS,
+  categoryConfig
+} from './data.js';
+import {
+  startQuiz,
+  showQuestion,
+  selectAnswer,
+  nextQuestion,
+  useHelper,
+  askAIAnalysis
+} from './quiz.js';
+import {
+  createRoom,
+  joinRoomByCode,
+  joinRoomById,
+  confirmCreateRoom,
+  toggleReady,
+  startRoomGame,
+  leaveRoom,
+  sendLobbyMessage,
+  kickPlayer,
+  loadRooms
+} from './rooms.js';
+import {
+  startDailyChallenge,
+  renderWeeklyChallenge,
+  renderSeasonTab,
+  switchChallengeTab,
+  claimWeeklyTask,
+  startWeeklyChallenge
+} from './challenges.js';
+import {
+  showFriendsModal,
+  copyFriendCode,
+  addFriendByCode,
+  removeFriend
+} from './friends.js';
 
 // ══════════════════════════════════════════════════════════════════
-// تعيين الدوال العامة على window (للاستخدام في HTML onclick)
+// تعيين الدوال والكائنات العامة على window (للاستخدام في HTML onclick)
 // ══════════════════════════════════════════════════════════════════
 
 // UI والتنقل
@@ -26,6 +89,8 @@ window.renderStats = renderStats;
 window.switchStatsTab = switchStatsTab;
 window.switchChallengeTab = switchChallengeTab;
 window.switchLeaderboard = (tab) => renderLeaderboard(tab);
+window.showShopTab = showShopTab;               // ← ضروري لتبويبات المتجر
+window.renderColorPicker = renderColorPicker;   // ← ضروري للسايدبار
 
 // المساعدات العامة
 window.showToast = showToast;
@@ -48,6 +113,11 @@ window.updateWeeklyTask = updateWeeklyTask;
 window.addSeasonXP = addSeasonXP;
 window.checkLevel = checkLevel;
 window.updateLoginStreak = updateLoginStreak;
+
+// كائنات البيانات (تُستخدم في دوال مثل showPlayerCard و handleFrameClick)
+window.AVATAR_FRAMES = AVATAR_FRAMES;
+window.ACCENT_COLORS = ACCENT_COLORS;
+window.categoryConfig = categoryConfig;
 
 // الاختبار والأسئلة
 window.startQuiz = startQuiz;
@@ -89,8 +159,7 @@ window.toggleSidebar = () => {
   o.style.display = open ? 'block' : 'none';
   if (open) {
     updateUI();
-    // renderColorPicker موجودة في ui.js ويتم استدعاؤها عبر updateUI أو toggleSidebar
-    if (typeof window.renderColorPicker === 'function') window.renderColorPicker();
+    if (typeof renderColorPicker === 'function') renderColorPicker();
   }
 };
 
@@ -178,7 +247,7 @@ window.showAchievementsModal = () => {
 window.showPlayerCard = () => {
   const d = window.gameData;
   const season = window.getCurrentSeason?.() || '';
-  const frame = (window.AVATAR_FRAMES || []).find(f => f.id === (d.avatarFrame || 'none')) || { style: '' };
+  const frame = (AVATAR_FRAMES || []).find(f => f.id === (d.avatarFrame || 'none')) || { style: '' };
   document.getElementById('player-card-content').innerHTML = `
     <div class="player-card">
       <div class="card-bg-glow"></div>
@@ -250,7 +319,7 @@ window.handleFrameClick = (frame) => {
     window.gameData.avatarFrame = frame.id;
     updateUI();
     saveData();
-    window.renderShop('frames');
+    renderShop('frames');
     showToast(`✅ تم تفعيل إطار: ${frame.name}`);
   } else {
     if (window.gameData.coins < frame.price) {
@@ -269,7 +338,7 @@ window.handleFrameClick = (frame) => {
         try { confetti({ particleCount: 40, spread: 50 }); } catch (e) {}
         updateUI();
         saveData();
-        window.renderShop('frames');
+        renderShop('frames');
         showToast(`✅ تم شراء وتفعيل: ${frame.name}`);
       }
     });
@@ -294,6 +363,48 @@ window.resetGame = () => {
   });
 };
 
+// دالة requestNotifPermission (موجودة في index.html)
+window.requestNotifPermission = async () => {
+  if (!('Notification' in window)) {
+    showToast('❌ المتصفح لا يدعم الإشعارات');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    showToast('🔔 تم تفعيل الإشعارات!');
+    const nb = document.getElementById('notif-btn');
+    if (nb) {
+      nb.innerText = '✅ الإشعارات مفعلة';
+      nb.style.background = 'rgba(34,197,94,.1)';
+      nb.style.color = '#22c55e';
+    }
+    // جدولة الإشعارات
+    scheduleNotification();
+  } else {
+    showToast('❌ تم رفض الإشعارات');
+  }
+};
+
+function scheduleNotification() {
+  if (Notification.permission !== 'granted') return;
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(20, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  setTimeout(() => {
+    new Notification('شغل مخك 🧠', {
+      body: 'لسه معملتش تحدي اليوم! العب دلوقتي وخد مكافأتك 🎁',
+      icon: 'https://i.postimg.cc/qqTBP312/1000061201.png'
+    });
+    setInterval(() => {
+      new Notification('شغل مخك 🧠', {
+        body: 'تحدي اليوم ينتظرك! لا تفوّت المكافأة 💰',
+        icon: 'https://i.postimg.cc/qqTBP312/1000061201.png'
+      });
+    }, 24 * 60 * 60 * 1000);
+  }, next - now);
+}
+
 // ══════════════════════════════════════════════════════════════════
 // بدء التطبيق
 // ══════════════════════════════════════════════════════════════════
@@ -305,6 +416,5 @@ window.resetGame = () => {
 
 // إعدادات إضافية عند التحميل
 window.addEventListener('load', () => {
-  // يمكن إضافة أي تهيئة إضافية هنا
   console.log('🚀 شغل مخك Ultra 4.0 - تم تحميل التطبيق');
 });
